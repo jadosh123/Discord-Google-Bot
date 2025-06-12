@@ -1,1 +1,1 @@
-# dc-google-bot
+# Discord Google Bot
