@@ -1,7 +1,6 @@
 from env import *
 import discord
 import requests
-import json
 
 TOKEN = BOT_TOKEN
 
