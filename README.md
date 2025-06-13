@@ -16,3 +16,7 @@ This is a fun personal project and is not meant to be deployed on a larger scale
 3. Install requirements located in requirements.txt:
 
         pip install -r requirements.txt
+
+4. Set your own environment variables and run this in the root directory or hit the run button if youre in a code editor:
+
+        python3 bot.py
