@@ -24,17 +24,17 @@ class MyClient(discord.Client):
             await message.channel.send('Hello World!')
 
         if message.content:
-            if message.content.startswith('/ggl'):
+            if message.content.startswith('.ggl'):
                 try:
-                    query = message.content.split('/ggl ')[1]
+                    query = message.content.split('.ggl ')[1]
                     final_url = f'{BASE_URL}key={GGL_API}&cx={GGL_CX}&q={query}'
                     search_type = 'web'
                 except IndexError as e:
                     print(f'Index error: {e}')
             
-            if message.content.startswith('/img'):
+            if message.content.startswith('.img'):
                 try:
-                    query = message.content.split('/img ')[1]
+                    query = message.content.split('.img ')[1]
                     final_url = f'{BASE_URL}key={GGL_API}&cx={GGL_CX}&q={query}&searchType=image'
                     search_type = 'img'
                 except IndexError as e:
