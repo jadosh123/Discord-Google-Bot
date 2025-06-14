@@ -133,6 +133,23 @@ class SearchPaginator(discord.ui.View):
         self.previous_button.disabled = False
         
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        
+    # TODO make delete button
+    @discord.ui.button(label='Delete 🗑️', style=discord.ButtonStyle.red)
+    async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Delete the message containing this embed"""
+        try:
+            await interaction.response.defer()
+            await interaction.delete_original_response()
+        except discord.NotFound:
+            # Message was already deleted
+            pass
+        except discord.Forbidden:
+            # Bot doesn't have permission to delete the message
+            await interaction.followup.send("I don't have permission to delete this message.", ephemeral=True)
+        except Exception as e:
+            # Handle any other errors
+            await interaction.followup.send(f"An error occurred while deleting the message: {str(e)}", ephemeral=True)
     
     async def on_timeout(self):
         # Disable all buttons
