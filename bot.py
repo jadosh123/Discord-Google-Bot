@@ -1,6 +1,8 @@
 from env import *
 import discord
 import requests
+import yt_dlp
+import os
 
 TOKEN = BOT_TOKEN
 
@@ -39,6 +41,49 @@ class MyClient(discord.Client):
                     search_type = 'img'
                 except IndexError as e:
                     print(f'Index error: {e}')
+                    
+            if message.content.startswith('.link'):
+                try:
+                    url = message.content.split('.link ')[1]
+                    
+                    # Configure yt-dlp options
+                    ydl_opts = {
+                        'format': 'best',  # Get the best quality
+                        'quiet': True,
+                        'no_warnings': True,
+                    }
+                    
+                    # Download the video
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        video_path = ydl.prepare_filename(info)
+                    
+                    # Send the video to Discord
+                    await message.channel.send(file=discord.File(video_path))
+                    
+                    # Clean up the downloaded file
+                    os.remove(video_path)
+                    
+                    # Delete the user's message
+                    try:
+                        await message.delete()
+                    except discord.Forbidden:
+                        print("Bot doesn't have permission to delete messages")
+                    except discord.NotFound:
+                        print("Message was already deleted")
+                    except Exception as e:
+                        print(f"Error deleting message: {str(e)}")
+                    
+                    return  # Exit the function to prevent further code execution
+                    
+                except Exception as e:
+                    print(f'Error downloading video: {str(e)}')
+                    # Try to delete the message even if video download failed
+                    try:
+                        await message.delete()
+                    except:
+                        pass
+                    return  # Exit the function to prevent further code execution
 
             # Send request if final url valid
             try:
