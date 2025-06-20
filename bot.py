@@ -22,13 +22,10 @@ class MyClient(discord.Client):
         if message.author == self.user:
             return
 
-        if message.content.startswith('$hello'):
-            await message.channel.send('Hello World!')
-
         if message.content:
-            if message.content.startswith('.ggl'):
+            if message.content.startswith('.google'):
                 try:
-                    query = message.content.split('.ggl ')[1]
+                    query = message.content.split('.google ')[1]
                     final_url = f'{BASE_URL}key={GGL_API}&cx={GGL_CX}&q={query}'
                     search_type = 'web'
                 except IndexError as e:
@@ -42,48 +39,68 @@ class MyClient(discord.Client):
                 except IndexError as e:
                     print(f'Index error: {e}')
                     
-            if message.content.startswith('.link'):
+            if message.content.startswith('.avatar'):
                 try:
-                    url = message.content.split('.link ')[1]
-                    
-                    # Configure yt-dlp options
-                    ydl_opts = {
-                        'format': 'best',  # Get the best quality
-                        'quiet': True,
-                        'no_warnings': True,
-                    }
-                    
-                    # Download the video
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = ydl.extract_info(url, download=True)
-                        video_path = ydl.prepare_filename(info)
-                    
-                    # Send the video to Discord
-                    await message.channel.send(file=discord.File(video_path))
-                    
-                    # Clean up the downloaded file
-                    os.remove(video_path)
-                    
-                    # Delete the user's message
-                    try:
-                        await message.delete()
-                    except discord.Forbidden:
-                        print("Bot doesn't have permission to delete messages")
-                    except discord.NotFound:
-                        print("Message was already deleted")
-                    except Exception as e:
-                        print(f"Error deleting message: {str(e)}")
-                    
-                    return  # Exit the function to prevent further code execution
-                    
+                    requested_user = message.mentions[0]
+                    requested_user_avatar = requested_user.avatar.url
+                    await message.channel.send(f'{requested_user_avatar}')
                 except Exception as e:
-                    print(f'Error downloading video: {str(e)}')
-                    # Try to delete the message even if video download failed
-                    try:
-                        await message.delete()
-                    except:
-                        pass
-                    return  # Exit the function to prevent further code execution
+                    print(f'Error sending avatar: {e}')
+                    
+            # if message.content.startswith('.link'):
+            #     try:
+            #         url = message.content.split('.link ')[1]
+                    
+            #         # Configure yt-dlp options
+            #         ydl_opts = {
+            #             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',  # More flexible format selection
+            #             'quiet': True,
+            #             'no_warnings': True,
+            #             # 'cookiesfrombrowser': ('chrome',),  # Use cookies from Chrome
+            #             'postprocessors': [{
+            #                 'key': 'FFmpegVideoConvertor',
+            #                 'preferedformat': 'mp4',
+            #             }],
+            #         }
+                    
+            #         # Download the video
+            #         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            #             info = ydl.extract_info(url, download=True)
+            #             video_path = ydl.prepare_filename(info)
+                    
+            #         # Check file size
+            #         file_size = os.path.getsize(video_path)
+            #         if file_size > 50 * 1024 * 1024:  # 50MB in bytes
+            #             await message.channel.send(f"Sorry, the video is too large ({file_size / (1024*1024):.1f}MB). Discord's limit is 50MB.")
+            #             os.remove(video_path)
+            #             return
+                    
+            #         # Send the video to Discord
+            #         await message.channel.send(f"from {message.author.mention}", file=discord.File(video_path))
+                    
+            #         # Clean up the downloaded file
+            #         os.remove(video_path)
+                    
+            #         # Delete the user's message
+            #         try:
+            #             await message.delete()
+            #         except discord.Forbidden:
+            #             print("Bot doesn't have permission to delete messages")
+            #         except discord.NotFound:
+            #             print("Message was already deleted")
+            #         except Exception as e:
+            #             print(f"Error deleting message: {str(e)}")
+                    
+            #         return  # Exit the function to prevent further code execution
+                    
+            #     except Exception as e:
+            #         print(f'Error downloading video: {str(e)}')
+            #         # Try to delete the message even if video download failed
+            #         try:
+            #             await message.delete()
+            #         except:
+            #             pass
+            #         return  # Exit the function to prevent further code execution
 
             # Send request if final url valid
             try:
