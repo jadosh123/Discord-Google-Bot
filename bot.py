@@ -1,8 +1,10 @@
-from env import *
+from env import BOT_TOKEN, GGL_API, GGL_CX, BASE_URL
 import discord
-import requests
+import aiohttp
 import yt_dlp
 import os
+import asyncio
+from typing import Optional
 
 TOKEN = BOT_TOKEN
 
@@ -22,10 +24,13 @@ class MyClient(discord.Client):
         if message.author == self.user:
             return
 
+        if message.content.startswith('$hello'):
+            await message.channel.send('Hello World!')
+
         if message.content:
-            if message.content.startswith('.google'):
+            if message.content.startswith('.ggl'):
                 try:
-                    query = message.content.split('.google ')[1]
+                    query = message.content.split('.ggl ')[1]
                     final_url = f'{BASE_URL}key={GGL_API}&cx={GGL_CX}&q={query}'
                     search_type = 'web'
                 except IndexError as e:
@@ -39,86 +44,77 @@ class MyClient(discord.Client):
                 except IndexError as e:
                     print(f'Index error: {e}')
                     
-            if message.content.startswith('.avatar'):
+            if message.content.startswith('.link'):
                 try:
-                    requested_user = message.mentions[0]
-                    requested_user_avatar = requested_user.avatar.url
-                    await message.channel.send(f'{requested_user_avatar}')
+                    url = message.content.split('.link ')[1]
+                    
+                    # Configure yt-dlp options
+                    ydl_opts = {
+                        'format': 'best',  # Get the best quality
+                        'quiet': True,
+                        'no_warnings': True,
+                    }
+                    
+                    # Download the video asynchronously
+                    def download_video():
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            info = ydl.extract_info(url, download=True)
+                            return ydl.prepare_filename(info)
+                    
+                    video_path = await asyncio.to_thread(download_video)
+                    
+                    # Send the video to Discord
+                    await message.channel.send(file=discord.File(video_path))
+                    
+                    # Clean up the downloaded file asynchronously
+                    await asyncio.to_thread(os.remove, video_path)
+                    
+                    # Delete the user's message
+                    try:
+                        await message.delete()
+                    except discord.Forbidden:
+                        print("Bot doesn't have permission to delete messages")
+                    except discord.NotFound:
+                        print("Message was already deleted")
+                    except Exception as e:
+                        print(f"Error deleting message: {str(e)}")
+                    
+                    return  # Exit the function to prevent further code execution
+                    
                 except Exception as e:
-                    print(f'Error sending avatar: {e}')
-                    
-            # if message.content.startswith('.link'):
-            #     try:
-            #         url = message.content.split('.link ')[1]
-                    
-            #         # Configure yt-dlp options
-            #         ydl_opts = {
-            #             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',  # More flexible format selection
-            #             'quiet': True,
-            #             'no_warnings': True,
-            #             # 'cookiesfrombrowser': ('chrome',),  # Use cookies from Chrome
-            #             'postprocessors': [{
-            #                 'key': 'FFmpegVideoConvertor',
-            #                 'preferedformat': 'mp4',
-            #             }],
-            #         }
-                    
-            #         # Download the video
-            #         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            #             info = ydl.extract_info(url, download=True)
-            #             video_path = ydl.prepare_filename(info)
-                    
-            #         # Check file size
-            #         file_size = os.path.getsize(video_path)
-            #         if file_size > 50 * 1024 * 1024:  # 50MB in bytes
-            #             await message.channel.send(f"Sorry, the video is too large ({file_size / (1024*1024):.1f}MB). Discord's limit is 50MB.")
-            #             os.remove(video_path)
-            #             return
-                    
-            #         # Send the video to Discord
-            #         await message.channel.send(f"from {message.author.mention}", file=discord.File(video_path))
-                    
-            #         # Clean up the downloaded file
-            #         os.remove(video_path)
-                    
-            #         # Delete the user's message
-            #         try:
-            #             await message.delete()
-            #         except discord.Forbidden:
-            #             print("Bot doesn't have permission to delete messages")
-            #         except discord.NotFound:
-            #             print("Message was already deleted")
-            #         except Exception as e:
-            #             print(f"Error deleting message: {str(e)}")
-                    
-            #         return  # Exit the function to prevent further code execution
-                    
-            #     except Exception as e:
-            #         print(f'Error downloading video: {str(e)}')
-            #         # Try to delete the message even if video download failed
-            #         try:
-            #             await message.delete()
-            #         except:
-            #             pass
-            #         return  # Exit the function to prevent further code execution
+                    print(f'Error downloading video: {str(e)}')
+                    # Try to delete the message even if video download failed
+                    try:
+                        await message.delete()
+                    except Exception as e:
+                        print(f"Error deleting message: {str(e)}")
+                    return  # Exit the function to prevent further code execution
 
-            # Send request if final url valid
+            # Send request if final url valid (async HTTP request)
             try:
-                response = requests.get(final_url)
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(final_url) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if 'items' in data and data['items']:
+                                paginator = SearchPaginator(
+                                    data['items'][:10], search_type
+                                )
+                                embed = paginator.get_embed()
+                                msg = await message.channel.send(
+                                    embed=embed, view=paginator
+                                )
+                                paginator.message = msg
+                            else:
+                                await message.channel.send(
+                                    'No search results found.'
+                                )
+                        else:
+                            await message.channel.send(
+                                f'Error: {response.status}'
+                            )
             except UnboundLocalError:
                 return
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'items' in data and data['items']:
-                    paginator = SearchPaginator(data['items'][:10], search_type)
-                    embed = paginator.get_embed()
-                    msg = await message.channel.send(embed=embed, view=paginator)
-                    paginator.message = msg
-                else:
-                    await message.channel.send('No search results found.')
-            else:
-                await message.channel.send(f'Error: {response.status_code}')
 
 
 class SearchPaginator(discord.ui.View):
@@ -128,11 +124,15 @@ class SearchPaginator(discord.ui.View):
         self.current_page = 0
         self.max_pages = len(search_results)
         self.search_type = search_type
+        self.message: Optional[discord.Message] = None
         
     def get_embed(self):
         """Create an embed for the current page"""
         if not self.search_results:
-            embed = discord.Embed(title="No Results", description="No search results found.")
+            embed = discord.Embed(
+                title="No Results",
+                description="No search results found."
+            )
             return embed
             
         result = self.search_results[self.current_page]
@@ -151,7 +151,11 @@ class SearchPaginator(discord.ui.View):
             # Add context URL if available
             context_link = result.get('image', {}).get('contextLink')
             if context_link:
-                embed.add_field(name="Source", value=f"[View Page]({context_link})", inline=False)
+                embed.add_field(
+                    name="Source",
+                    value=f"[View Page]({context_link})",
+                    inline=False
+                )
         else:
             embed = discord.Embed(
                 title=result.get('title', 'No title'),
@@ -171,11 +175,21 @@ class SearchPaginator(discord.ui.View):
                 if thumbnail_url:
                     embed.set_thumbnail(url=thumbnail_url)
             
-        embed.set_footer(text=f"Page {self.current_page + 1} of {self.max_pages}")
+        embed.set_footer(
+            text=f"Page {self.current_page + 1} of {self.max_pages}"
+        )
         return embed
     
-    @discord.ui.button(label='◀️ Previous', style=discord.ButtonStyle.primary, disabled=True)
-    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label='◀️ Previous',
+        style=discord.ButtonStyle.primary,
+        disabled=True
+    )
+    async def previous_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         self.current_page -= 1
         
         # Update button states
@@ -183,10 +197,16 @@ class SearchPaginator(discord.ui.View):
             button.disabled = True
         self.next_button.disabled = False
         
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        await interaction.response.edit_message(
+            embed=self.get_embed(), view=self
+        )
     
     @discord.ui.button(label='Next ▶️', style=discord.ButtonStyle.primary)
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def next_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         self.current_page += 1
         
         # Update button states
@@ -194,11 +214,16 @@ class SearchPaginator(discord.ui.View):
             button.disabled = True
         self.previous_button.disabled = False
         
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        await interaction.response.edit_message(
+            embed=self.get_embed(), view=self
+        )
         
-    # TODO make delete button
     @discord.ui.button(label='Delete 🗑️', style=discord.ButtonStyle.red)
-    async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def delete_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
         """Delete the message containing this embed"""
         try:
             await interaction.response.defer()
@@ -208,18 +233,25 @@ class SearchPaginator(discord.ui.View):
             pass
         except discord.Forbidden:
             # Bot doesn't have permission to delete the message
-            await interaction.followup.send("I don't have permission to delete this message.", ephemeral=True)
+            await interaction.followup.send(
+                "I don't have permission to delete this message.",
+                ephemeral=True
+            )
         except Exception as e:
             # Handle any other errors
-            await interaction.followup.send(f"An error occurred while deleting the message: {str(e)}", ephemeral=True)
+            await interaction.followup.send(
+                f"An error occurred while deleting the message: {str(e)}",
+                ephemeral=True
+            )
     
     async def on_timeout(self):
         # Disable all buttons
         for item in self.children:
-            item.disabled = True
+            if hasattr(item, 'disabled'):
+                item.disabled = True  # type: ignore
         
         # Update the message to show disabled buttons
-        if hasattr(self, 'message') and self.message:
+        if self.message is not None:
             try:
                 await self.message.edit(view=self)
             except discord.NotFound:
