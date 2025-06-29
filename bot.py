@@ -35,7 +35,7 @@ class MyClient(discord.Client):
                     search_type = 'web'
                 except IndexError as e:
                     print(f'Index error: {e}')
-            
+
             if message.content.startswith('.img'):
                 try:
                     query = message.content.split('.img ')[1]
@@ -43,32 +43,32 @@ class MyClient(discord.Client):
                     search_type = 'img'
                 except IndexError as e:
                     print(f'Index error: {e}')
-                    
+
             if message.content.startswith('.link'):
                 try:
                     url = message.content.split('.link ')[1]
-                    
+
                     # Configure yt-dlp options
                     ydl_opts = {
                         'format': 'best',  # Get the best quality
                         'quiet': True,
                         'no_warnings': True,
                     }
-                    
+
                     # Download the video asynchronously
                     def download_video():
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                             info = ydl.extract_info(url, download=True)
                             return ydl.prepare_filename(info)
-                    
+
                     video_path = await asyncio.to_thread(download_video)
-                    
+
                     # Send the video to Discord
                     await message.channel.send(file=discord.File(video_path))
-                    
+
                     # Clean up the downloaded file asynchronously
                     await asyncio.to_thread(os.remove, video_path)
-                    
+
                     # Delete the user's message
                     try:
                         await message.delete()
@@ -78,9 +78,9 @@ class MyClient(discord.Client):
                         print("Message was already deleted")
                     except Exception as e:
                         print(f"Error deleting message: {str(e)}")
-                    
+
                     return  # Exit the function to prevent further code execution
-                    
+
                 except Exception as e:
                     print(f'Error downloading video: {str(e)}')
                     # Try to delete the message even if video download failed
@@ -125,7 +125,7 @@ class SearchPaginator(discord.ui.View):
         self.max_pages = len(search_results)
         self.search_type = search_type
         self.message: Optional[discord.Message] = None
-        
+
     def get_embed(self):
         """Create an embed for the current page"""
         if not self.search_results:
@@ -134,20 +134,20 @@ class SearchPaginator(discord.ui.View):
                 description="No search results found."
             )
             return embed
-            
+
         result = self.search_results[self.current_page]
-        
+
         if self.search_type == 'img':
             embed = discord.Embed(
                 title=result.get('title', 'No title'),
                 color=0x4285f4
             )
-            
+
             # Set the image directly from the link
             image_url = result.get('link')
             if image_url:
                 embed.set_image(url=image_url)
-            
+
             # Add context URL if available
             context_link = result.get('image', {}).get('contextLink')
             if context_link:
@@ -163,23 +163,23 @@ class SearchPaginator(discord.ui.View):
                 url=result.get('link', ''),
                 color=0x4285f4
             )
-            
+
             # Add image if available
             if 'pagemap' in result and 'cse_image' in result['pagemap']:
                 image_url = result['pagemap']['cse_image'][0].get('src')
                 if image_url:
                     embed.set_image(url=image_url)
-            
+
             elif 'pagemap' in result and 'cse_thumbnail' in result['pagemap']:
                 thumbnail_url = result['pagemap']['cse_thumbnail'][0].get('src')
                 if thumbnail_url:
                     embed.set_thumbnail(url=thumbnail_url)
-            
+
         embed.set_footer(
             text=f"Page {self.current_page + 1} of {self.max_pages}"
         )
         return embed
-    
+
     @discord.ui.button(
         label='◀️ Previous',
         style=discord.ButtonStyle.primary,
@@ -191,16 +191,16 @@ class SearchPaginator(discord.ui.View):
         button: discord.ui.Button
     ):
         self.current_page -= 1
-        
+
         # Update button states
         if self.current_page == 0:
             button.disabled = True
         self.next_button.disabled = False
-        
+
         await interaction.response.edit_message(
             embed=self.get_embed(), view=self
         )
-    
+
     @discord.ui.button(label='Next ▶️', style=discord.ButtonStyle.primary)
     async def next_button(
         self,
@@ -208,16 +208,16 @@ class SearchPaginator(discord.ui.View):
         button: discord.ui.Button
     ):
         self.current_page += 1
-        
+
         # Update button states
         if self.current_page >= self.max_pages - 1:
             button.disabled = True
         self.previous_button.disabled = False
-        
+
         await interaction.response.edit_message(
             embed=self.get_embed(), view=self
         )
-        
+
     @discord.ui.button(label='Delete 🗑️', style=discord.ButtonStyle.red)
     async def delete_button(
         self,
@@ -243,13 +243,13 @@ class SearchPaginator(discord.ui.View):
                 f"An error occurred while deleting the message: {str(e)}",
                 ephemeral=True
             )
-    
+
     async def on_timeout(self):
         # Disable all buttons
         for item in self.children:
             if hasattr(item, 'disabled'):
                 item.disabled = True  # type: ignore
-        
+
         # Update the message to show disabled buttons
         if self.message is not None:
             try:
