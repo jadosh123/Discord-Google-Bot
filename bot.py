@@ -1,4 +1,4 @@
-from env import BOT_TOKEN, GGL_API, GGL_CX, BASE_URL
+from env import BOT_TOKEN, GGL_API, GGL_CX, BASE_URL, BOT_TEST
 import discord
 import aiohttp
 import yt_dlp
@@ -6,7 +6,8 @@ import os
 import asyncio
 from typing import Optional
 
-TOKEN = BOT_TOKEN
+# TOKEN = BOT_TOKEN
+TOKEN = BOT_TEST
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -20,6 +21,17 @@ class MyClient(discord.Client):
         print(f'Logged in as {self.user}')
         print('Bot is online!')
 
+    async def delete_user_message(self, message):
+        """Helper function to delete user messages with proper error handling"""
+        try:
+            await message.delete()
+        except discord.Forbidden:
+            print("Bot doesn't have permission to delete messages")
+        except discord.NotFound:
+            print("Message was already deleted")
+        except Exception as e:
+            print(f"Error deleting message: {str(e)}")
+
     async def on_message(self, message):
         if message.author == self.user:
             return
@@ -28,9 +40,9 @@ class MyClient(discord.Client):
             await message.channel.send('Hello World!')
 
         if message.content:
-            if message.content.startswith('.ggl'):
+            if message.content.startswith('.google'):
                 try:
-                    query = message.content.split('.ggl ')[1]
+                    query = message.content.split('.google ')[1]
                     final_url = f'{BASE_URL}key={GGL_API}&cx={GGL_CX}&q={query}'
                     search_type = 'web'
                 except IndexError as e:
@@ -48,12 +60,41 @@ class MyClient(discord.Client):
                 try:
                     url = message.content.split('.link ')[1]
 
-                    # Configure yt-dlp options
-                    ydl_opts = {
-                        'format': 'best',  # Get the best quality
-                        'quiet': True,
-                        'no_warnings': True,
-                    }
+                    # Get video info first to check size
+                    def get_video_info():
+                        with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+                            return ydl.extract_info(url, download=False)
+
+                    video_info = await asyncio.to_thread(get_video_info)
+                    filesize_mb = 0  # Default to 0 if we can't get file size
+
+                    if video_info is not None:
+                        filesize = video_info.get('filesize')
+                        if filesize is not None:
+                            filesize_mb = filesize / (1024 * 1024)
+
+                    # If block to determine compression level
+                    if filesize_mb > 8:
+                        # Heavy compression for large files
+                        ydl_opts = {
+                            'format': 'best[filesize<8M]/best',
+                            'quiet': True,
+                            'no_warnings': True,
+                            'postprocessors': [{
+                                'key': 'FFmpegVideoConvertor',
+                                'preferedformat': 'mp4',
+                            }],
+                            'postprocessor_args': {
+                                'ffmpeg': ['-c:v', 'libx264', '-crf', '32', '-preset', 'fast', '-vf', 'scale=720:-1']
+                            }
+                        }
+                    else:
+                        # Configure yt-dlp options
+                        ydl_opts = {
+                            'format': 'best',  # Get the best quality
+                            'quiet': True,
+                            'no_warnings': True,
+                        }
 
                     # Download the video asynchronously
                     def download_video():
@@ -61,33 +102,31 @@ class MyClient(discord.Client):
                             info = ydl.extract_info(url, download=True)
                             return ydl.prepare_filename(info)
 
+                    # Download video and check filesize for downscaling
                     video_path = await asyncio.to_thread(download_video)
 
                     # Send the video to Discord
-                    await message.channel.send(file=discord.File(video_path))
+                    try:
+                        await message.channel.send(
+                            content=f'{message.author.mention} Sent the video',
+                            file=discord.File(video_path)
+                        )
+                    except Exception as e:  # Catches payload too large
+                        print(f'Error sending file: {e}')
+                        await asyncio.to_thread(os.remove, video_path)
 
                     # Clean up the downloaded file asynchronously
                     await asyncio.to_thread(os.remove, video_path)
 
                     # Delete the user's message
-                    try:
-                        await message.delete()
-                    except discord.Forbidden:
-                        print("Bot doesn't have permission to delete messages")
-                    except discord.NotFound:
-                        print("Message was already deleted")
-                    except Exception as e:
-                        print(f"Error deleting message: {str(e)}")
+                    await self.delete_user_message(message)
 
                     return  # Exit the function to prevent further code execution
 
                 except Exception as e:
                     print(f'Error downloading video: {str(e)}')
                     # Try to delete the message even if video download failed
-                    try:
-                        await message.delete()
-                    except Exception as e:
-                        print(f"Error deleting message: {str(e)}")
+                    await self.delete_user_message(message)
                     return  # Exit the function to prevent further code execution
 
             # Send request if final url valid (async HTTP request)
